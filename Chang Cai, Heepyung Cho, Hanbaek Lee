@@ -1,0 +1,593 @@
+
+*Part1 _ Cluster Simulation
+
+****************************
+*House Keeping
+****************************
+
+*#delimit ;
+set more off
+clear
+clear matrix
+clear mata
+
+set memory 1g
+set matsize 3000
+set maxvar 10000
+*ssc install outreg2
+
+
+****************************
+*Setting Seed
+****************************
+
+set seed 1234
+
+
+****************************
+*Generating Clustered Data
+****************************
+
+set obs 100
+gen eta_c = rnormal(0,1)
+gen d_star_c = rnormal(0,1)
+gen d_c = 1 if d_star_c > 0
+replace d_c = 0 if d_star_c <= 0
+gen clusterid = _n
+
+expand 100
+
+
+****************************
+*Generating Idiosyncratic part
+****************************
+
+gen epsilon_ic = rnormal(0,1)
+
+
+****************************
+*Generating y_ic 
+****************************
+
+gen y_ic = d_c + eta_c + d_c * eta_c + epsilon_ic
+
+
+****************************
+*(a)-(c). Regression of Y on D
+****************************
+
+reg y_ic	d_c
+	est store std_err
+
+reg y_ic	d_c, vce(robust)
+	est store std_err_robust
+	
+reg y_ic	d_c, vce(cluster clusterid) 
+	est store std_err_clustered
+
+    outreg2 [std_err	std_err_robust	std_err_clustered] using Table1_1.xml, see replace
+
+
+
+
+****************************
+*(e)-(f). Collapsing Data within Cluster
+****************************
+
+collapse y_ic d_c, by(clusterid)
+
+
+reg y_ic	d_c
+	est store std_err
+
+reg y_ic	d_c, vce(robust)
+	est store std_err_robust
+	
+reg y_ic	d_c, vce(hc2)
+	est store std_err_hc2
+		
+reg y_ic	d_c, vce(hc3)
+	est store std_err_hc3
+		
+    outreg2 [std_err	std_err_robust		std_err_hc2		std_err_hc3] using Table1_2.xml, see replace
+
+
+
+****************************
+*(a)-(e) Testing Through Monte Carlo
+****************************
+****************************
+program define dgp, rclass
+	clear
+	set obs 100
+	gen eta_c = rnormal(0,1)
+	gen d_star_c = rnormal(0,1)
+	gen d_c = 1 if d_star_c > 0
+	replace d_c = 0 if d_star_c <= 0
+	gen clusterid = _n
+
+	expand 100
+
+
+	****************************
+	*Generating Idiosyncratic part
+	****************************
+
+	gen epsilon_ic = rnormal(0,1)
+
+
+	****************************
+	*Generating y_ic
+	****************************
+
+	gen y_ic = d_c + eta_c + d_c * eta_c + epsilon_ic
+
+
+	****************************
+	*Regression of Y on D
+	****************************
+
+	reg y_ic	d_c
+	*	est store std_err
+
+	test d_c=1
+	return scalar reject1 = r(p)<0.05
+
+
+
+	reg y_ic	d_c, vce(cluster clusterid) 
+	*	est store std_err_clustered
+
+	test d_c=1
+	return scalar reject2 = r(p)<0.05
+
+	*    outreg2 [std_err	std_err_clustered] using Table1, see replace
+
+
+
+	****************************
+	*Collapsing Data within Cluster
+	****************************
+
+	collapse y_ic d_c, by(clusterid)
+
+
+	reg y_ic	d_c
+	*	est store std_err
+
+	test d_c=1
+	return scalar reject3 = r(p)<0.05
+
+
+
+	reg y_ic	d_c, vce(robust)
+	*	est store std_err_robust
+
+	test d_c=1
+	return scalar reject4 = r(p)<0.05
+
+
+	
+	reg y_ic	d_c, vce(hc2)
+	*	est store std_err_hc2
+		
+	test d_c=1
+	return scalar reject5 = r(p)<0.05
+		
+	*    outreg2 [std_err	std_err_robust		std_err_hc2] using Table2, see replace
+
+end
+****************************
+****************************
+*Simulation
+****************************
+
+simulate reject1=r(reject1) reject2=r(reject2) reject3=r(reject3) reject4=r(reject4) reject5=r(reject5), reps(1000) : dgp
+*	command: dgp
+*	Reject1: r(reject1)
+*	Reject2: r(reject2)
+*	Reject3: r(reject3)
+*	Reject4: r(reject4)
+*	Reject5: r(reject5)
+
+summarize _all
+
+logout, save(Table1_3) excel replace: summarize
+
+*Part2 _ Experimental Approach
+
+****************************
+*House Keeping
+****************************
+
+*#delimit ;
+set more off
+clear
+clear matrix
+clear mata
+
+set memory 1g
+set matsize 3000
+set maxvar 10000
+*ssc install outreg2
+
+
+****************************
+*Data Loading
+****************************
+
+use "C:\Users\HANBAEK\Dropbox\Hanbaek\2016_spring\Applied_Microeconometrics\Homework\Homework 1\Data\PSET1-2016.dta"
+
+
+****************************
+*(a). Data Summary
+****************************
+
+sort treat_real
+by treat_real: summarize vote02 age female vote00 vote98 persons newreg
+
+logout, save(Table_Part2_Ex_1.xml) excel replace: by treat_real:  summarize vote02 age female vote00 vote98 persons newreg
+
+gen non_treat_real=1-treat_real
+
+reg age treat_real non_treat_real,	noconstant
+test treat_real= non_treat_real
+logout, save(Table_Part2_Ex_2.xml) excel replace: test treat_real= non_treat_real
+logout, save(Table_Part2_Ex_3.xml) excel replace: ttest age, by(treat_real)
+
+reg female treat_real non_treat_real,	noconstant
+test treat_real= non_treat_real
+logout, save(Table_Part2_Ex_4.xml) excel replace: test treat_real= non_treat_real
+logout, save(Table_Part2_Ex_5.xml) excel replace: ttest female, by(treat_real)
+
+reg vote00 treat_real non_treat_real,	noconstant
+test treat_real= non_treat_real
+logout, save(Table_Part2_Ex_6.xml) excel replace: test treat_real= non_treat_real
+logout, save(Table_Part2_Ex_7.xml) excel replace: ttest vote00, by(treat_real)
+
+reg vote98 treat_real non_treat_real,	noconstant
+test treat_real= non_treat_real
+logout, save(Table_Part2_Ex_8.xml) excel replace: test treat_real= non_treat_real
+logout, save(Table_Part2_Ex_9.xml) excel replace: ttest vote98, by(treat_real)
+
+reg persons treat_real non_treat_real,	noconstant
+test treat_real= non_treat_real
+logout, save(Table_Part2_Ex_10.xml) excel replace: test treat_real= non_treat_real
+logout, save(Table_Part2_Ex_11.xml) excel replace: ttest persons, by(treat_real)
+
+reg newreg treat_real non_treat_real,	noconstant
+test treat_real= non_treat_real
+logout, save(Table_Part2_Ex_12.xml) excel replace: test treat_real= non_treat_real
+logout, save(Table_Part2_Ex_13.xml) excel replace: ttest newreg, by(treat_real)
+
+
+
+****************************
+*Random Assignment Check
+****************************
+
+logit treat_real age female vote00 vote98 persons newreg
+*	est store regression_result
+*	outreg2 [regression_result] using Table2_3, see replace
+	outreg2 using Table_Part2_Ex_14.xml, addstat(Pseudo R-squared, `e(r2_p)') see replace
+	
+	
+
+
+****************************
+*OLS Regression
+****************************
+
+reg vote02	treat_real, vce(robust)
+	est store Hetero_robust_error_1
+
+reg vote02	contact, vce(robust)
+	est store Hetero_robust_error_2
+	
+outreg2 [Hetero_robust_error_1 Hetero_robust_error_2 ] using Table_Part2_Ex_15.xml,see replace
+	
+	
+
+****************************
+*IV Regression
+****************************
+
+*Fisrt Stage
+
+reg contact	treat_real	age female vote00 vote98 persons newreg, 
+predict residual_1,	resid
+predict pred_contact,	xb
+	est store first_stage_1
+outreg2 [first_stage_1] using Table_Part2_Ex_16.xml , addstat(F-statistics, e(F)) see replace
+scalar b1 = _b[treat_real]
+
+
+*Additional First Stage
+
+reg vote02	treat_real	age female vote00 vote98 persons newreg, 
+predict residual_2, resid	
+	est store first_stage_2
+outreg2 [first_stage_2] using Table_Part2_Ex_17.xml, addstat(F-statistics, e(F)) see replace
+scalar b2 = _b[treat_real]
+
+
+*Wald Estimator
+
+scalar wald_est = b2/b1
+display wald_est		
+
+		
+*IV Second Stage;
+reg  vote02	pred_contact age female vote00 vote98 persons newreg, 
+	est store second_stage
+outreg2 [second_stage] using Table_Part2_Ex_18.xml, addstat(F-statistics, e(F)) see replace
+
+
+*using 2sls;
+ivreg vote02 (contact=treat_real) age female vote00 vote98 persons newreg 
+
+*Conrol Approach;
+reg vote02	contact age female vote00 vote98 persons newreg residual_1
+	est store control_approach
+outreg2 [control_approach] using Table_Part2_Ex_19.xml, addstat(F-statistics, e(F)) see replace
+	
+
+
+*Part2 _ Non-Experimental Approach
+
+****************************
+*House Keeping
+****************************
+
+*#delimit ;
+set more off
+clear
+clear matrix
+clear mata
+
+set memory 1g
+set matsize 3000
+set maxvar 10000
+*ssc install outreg2
+
+
+****************************
+*Data Loading
+****************************
+
+use "C:\Users\HANBAEK\Dropbox\Hanbaek\2016_spring\Applied_Microeconometrics\Homework\Homework 1\Data\PSET1-2016.dta"
+
+
+****************************
+*OLS Capturing Difference
+****************************
+
+gen no_contact = 1 - contact
+
+reg vote02 contact no_contact, noconstant
+	est store separate_contact
+
+	
+reg vote02 contact
+	est store difference_contact
+	
+outreg2 [separate_contact difference_contact] using Table_Part2_Non-Ex_1.xml,see replace
+
+*test
+
+reg vote02 contact no_contact, noconstant
+display _b[contact]-_b[no_contact]
+test _b[contact]=_b[no_contact]
+
+
+
+****************************
+*OLS with Controls
+****************************
+
+reg vote02 contact no_contact age female vote00 vote98 persons newreg, noconstant
+	est store separate_contact_control
+reg vote02 contact age female vote00 vote98 persons newreg
+	est store diff_contact_control
+
+*test
+	
+reg vote02 contact no_contact age female vote00 vote98 persons newreg, noconstant	
+display _b[contact]-_b[no_contact]
+test _b[contact]=_b[no_contact]
+
+	outreg2 [separate_contact_control diff_contact_control] using Table_Part2_Non-Ex_2.xml,see replace
+
+
+
+
+****************************
+*OLS with Diffrential Control Effects
+****************************
+
+g contact_age = contact*age 
+g contact_female = contact*female 
+g contact_vote00 = contact*vote00 
+g contact_vote98 = contact*vote98
+g contact_persons = contact*persons
+g contact_newreg = contact*newreg
+g no_contact_age = no_contact*age
+g no_contact_female = no_contact*female
+g no_contact_vote00 = no_contact*vote00
+g no_contact_vote98 = no_contact*vote98
+g no_contact_persons = no_contact*persons
+g no_contact_newreg = no_contact*newreg
+
+xi: reg vote02 contact no_contact contact*age contact*female contact*vote00 contact*vote98 contact*persons contact*newreg no_contact*age no_contact*female no_contact*vote00 no_contact*vote98 no_contact*persons no_contact*newreg, noconstant
+	est store separate_contact_diffctrl
+xi: reg vote02 contact contact*age contact*female contact*vote00 contact*vote98 contact*persons contact*newreg age female vote00 vote98 persons newreg
+	est store diff_contact_diffctrl
+	
+outreg2 [separate_contact_diffctrl diff_contact_diffctrl] using Table_Part2_Non-Ex_3.xml,see replace
+
+
+
+*Coefficient Test
+
+reg vote02 contact no_contact contact*age contact*female contact*vote00 contact*vote98 contact*persons contact*newreg no_contact*age no_contact*female no_contact*vote00 no_contact*vote98 no_contact*persons no_contact*newreg, noconstant
+
+display _b[contact_age]-_b[no_contact_age]
+test _b[contact_age]=_b[no_contact_age]
+
+display _b[contact_female]-_b[no_contact_female]
+test _b[contact_female]=_b[no_contact_female]
+
+display _b[contact_vote00]-_b[no_contact_vote00]
+test _b[contact_vote00]=_b[no_contact_vote00]
+
+display _b[contact_vote98]-_b[no_contact_vote98]
+test _b[contact_vote98]=_b[no_contact_vote98]
+
+display _b[contact_persons]-_b[no_contact_persons]
+test _b[contact_persons]=_b[no_contact_persons]
+
+display _b[contact_newreg]-_b[no_contact_newreg]
+test _b[contact_newreg]=_b[no_contact_newreg]
+
+
+
+
+
+****************************
+*Propensity Score
+****************************
+
+/*pscore*/
+probit contact age female vote00 vote98 persons newreg
+predict p
+
+pscore contact age female vote00 vote98 persons newreg, pscore(pscore_contact) blockid(id)
+
+summarize p pscore_contact
+logout, save(Table_Part2_Non-Ex_4) excel replace: summarize p pscore_contact
+
+
+
+pscore no_contact age female vote00 vote98 persons newreg, pscore(pscore_no_contact)
+
+/*Epanechnikov kernel with optimal bandwidth*/
+kdensity pscore_contact
+graph export 1_Epanechnikov_opt.png, replace
+
+/*Epanechnikov kernel with bandwidth equal to 0.05*/
+kdensity pscore_contact, bwidth(0.05)
+graph export 2_Epanechnikov_05.png, replace
+
+/*Triangle kernel with optimal bandwidth*/
+kdensity pscore_contact, triangle
+graph export 3_Triangle_opt.png, replace
+
+
+/*Contact vs. Non-Contact*/
+kdensity pscore_contact if contact==1, nograph generate(x fx)
+kdensity pscore_contact if contact==0, nograph generate(y fy)
+
+label var fx "Contact"
+label var fy "No Contact"
+twoway line fx fy x, sort ytitle(Density)
+graph export 4_cont_nocont.png, replace
+
+
+
+****************************
+*Treatment Effect on Treated
+****************************
+****************************
+*Propensity Score
+****************************
+/*propensity score approach*/
+
+gen b1=(contact*vote02)/pscore_contact
+sum b1
+scalar b11=r(sum)
+display b11
+
+gen b2=contact/pscore_contact
+sum b2
+scalar b22=r(sum)
+display b22
+
+gen b3=((1-contact)*vote02)/(1-pscore_contact) 
+sum b3
+scalar b33=r(sum)
+display b33
+
+gen b4=(1-contact)/(1-pscore_contact)
+sum b4
+scalar b44=r(sum)
+display b44
+
+scalar bhat=(b11/b22)-(b33/b44)
+display bhat
+
+
+/*WLS*/
+
+g lambda = contact + no_contact*pscore_contact/(1-pscore_contact)
+reg vote02 contact[w=lambda]
+	est store wls
+
+outreg2 [wls] using Table_Part2_Non-Ex_5.xml,see replace
+
+
+
+
+****************************
+*Propensity Score Matching
+****************************
+
+
+/*Matching*/
+
+/*
+With the given code match2.ado (as used below), it took significantly long time to match the controls. 
+Therefore, we took an alternatvie approach using psmatch2.ado
+*/
+
+/*
+
+	syntax varlist(min=3 num) [if] [in] [pw/] [, m(int 1) tc(string) ///
+		METric(string) BIASadj(string) EXact(string) LEvel(int 95) ///
+		Var(string) ROBust(int 0) Keep(string) replace]
+
+	match vote02 contact age female vote00 vote98 persons newreg,replace  
+		est store match_control
+	match vote02 contact pscore_contact,replace  
+		est store match_pscore	
+	outreg2 [match_control match_pscore] using Table5_match.xml,see replace
+*/
+
+psmatch2 contact no_contact age female vote00 vote98 persons newreg, out(vote02) ties
+*	est store ps_ctrl
+psmatch2 contact, out(vote02) p(pscore_contact) ties
+*	est store ps_score
+*teffects psmatch (vote02) (contact age female vote00 vote98 persons newreg, probit), atet
+*	est store te_ctrl
+*	outreg2 [ps_ctrl ps_score te_ctrl] using Table_Part2_Non-Ex_6.xml,see replace
+
+
+
+****************************
+*Various Matching
+****************************
+
+/*Nearest-neighbor matching*/
+psmatch2 contact age female vote00 vote98 persons newreg, out(vote02) ties neighbor(2)
+*teffects nnmatch (vote02 age female vote00 vote98 persons newreg) (contact), atet
+
+/*Stratification matching*/
+atts vote02 contact, pscore(pscore_contact) blockid(id)
+
+/*Radius Matching*/
+psmatch2 contact age female vote00 vote98 persons newreg, radius out(vote02) ties
+
+/*Kernel Matching*/
+psmatch2 contact age female vote00 vote98 persons newreg, kernel out(vote02) ties
+
+
+
